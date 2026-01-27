@@ -1,0 +1,9 @@
+apiVersion: backup.mybackup.com/v1alpha1
+kind: BackupTask
+metadata:
+  labels:
+    app.kubernetes.io/name: backup-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: backuptask-sample
+spec:
+  # TODO(user): Add fields here

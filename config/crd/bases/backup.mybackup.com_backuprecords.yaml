@@ -1,0 +1,180 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.19.0
+  name: backuprecords.backup.mybackup.com
+spec:
+  group: backup.mybackup.com
+  names:
+    kind: BackupRecord
+    listKind: BackupRecordList
+    plural: backuprecords
+    singular: backuprecord
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: BackupRecord是备份记录的Schema
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: BackupRecordSpec defines the desired state of BackupRecord
+            properties:
+              backupFiles:
+                description: 备份文件信息
+                items:
+                  description: 备份文件信息
+                  properties:
+                    checksum:
+                      description: 校验和
+                      type: string
+                    path:
+                      description: 文件路径
+                      type: string
+                    size:
+                      description: 文件大小（字节）
+                      format: int64
+                      type: integer
+                    storageType:
+                      description: 存储类型
+                      type: string
+                  required:
+                  - path
+                  - size
+                  - storageType
+                  type: object
+                type: array
+              backupTaskRef:
+                description: |-
+                  foo is an example field of BackupRecord. Edit backuprecord_types.go to remove/update
+                  Foo *string `json:"foo,omitempty"`
+                  关联的BackupTask
+                properties:
+                  apiVersion:
+                    description: API version of the referent.
+                    type: string
+                  fieldPath:
+                    description: |-
+                      If referring to a piece of an object instead of an entire object, this string
+                      should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                      For example, if the object reference is to a container within a pod, this would take on a value like:
+                      "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                      the event) or if no container name is specified "spec.containers[2]" (container with
+                      index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                      referencing a part of an object.
+                    type: string
+                  kind:
+                    description: |-
+                      Kind of the referent.
+                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                    type: string
+                  name:
+                    description: |-
+                      Name of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                  namespace:
+                    description: |-
+                      Namespace of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                    type: string
+                  resourceVersion:
+                    description: |-
+                      Specific resourceVersion to which this reference is made, if any.
+                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                    type: string
+                  uid:
+                    description: |-
+                      UID of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              completionTime:
+                description: 备份完成时间
+                format: date-time
+                type: string
+              labels:
+                additionalProperties:
+                  type: string
+                description: 标签用于筛选
+                type: object
+              startTime:
+                description: 备份开始时间
+                format: date-time
+                type: string
+              statistics:
+                description: 备份统计信息
+                properties:
+                  compressionRatio:
+                    description: 压缩率
+                    type: string
+                  durationSeconds:
+                    description: 备份耗时（秒）
+                    type: string
+                  fileCount:
+                    description: 文件数量
+                    format: int32
+                    type: integer
+                  totalSize:
+                    description: 总文件大小（字节）
+                    format: int64
+                    type: integer
+                required:
+                - fileCount
+                - totalSize
+                type: object
+            required:
+            - backupTaskRef
+            - startTime
+            type: object
+          status:
+            description: BackupRecordStatus定义备份记录的观察状态
+            properties:
+              error:
+                description: 错误信息
+                type: string
+              expirationTime:
+                description: 过期时间
+                format: date-time
+                type: string
+              phase:
+                description: 备份状态
+                type: string
+              verificationStatus:
+                description: 验证状态
+                properties:
+                  message:
+                    description: 验证消息
+                    type: string
+                  result:
+                    description: 验证结果
+                    type: string
+                  verifiedAt:
+                    description: 验证时间
+                    format: date-time
+                    type: string
+                type: object
+            type: object
+        type: object
+    served: true
+    storage: true
