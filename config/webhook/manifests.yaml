@@ -6,6 +6,48 @@ metadata:
 webhooks:
 - admissionReviewVersions:
   - v1
+  - v1beta1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /mutate-backup-mybackup-com-v1alpha1-backuptask
+  failurePolicy: Fail
+  name: mbackuptask.kb.io
+  rules:
+  - apiGroups:
+    - backup.yourcompany.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - backuptasks
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /mutate-backup-yourcompany-com-v1alpha1-backuptask
+  failurePolicy: Fail
+  name: mbackuptask.kb.io
+  rules:
+  - apiGroups:
+    - backup.yourcompany.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - backuptasks
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
   clientConfig:
     service:
       name: webhook-service
@@ -30,6 +72,48 @@ kind: ValidatingWebhookConfiguration
 metadata:
   name: validating-webhook-configuration
 webhooks:
+- admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-backup-mybackup-com-v1alpha1-backuptask
+  failurePolicy: Fail
+  name: vbackuptask.kb.io
+  rules:
+  - apiGroups:
+    - backup.yourcompany.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - backuptasks
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-backup-yourcompany-com-v1alpha1-backuptask
+  failurePolicy: Fail
+  name: vbackuptask.kb.io
+  rules:
+  - apiGroups:
+    - backup.yourcompany.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - backuptasks
+  sideEffects: None
 - admissionReviewVersions:
   - v1
   clientConfig:

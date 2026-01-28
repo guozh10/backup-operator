@@ -1,77 +1,60 @@
-/*
-Copyright 2026.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 package v1alpha1
 
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-// 备份目标类型
+// BackupTargetType 备份目标类型
 type BackupTargetType string
+
 const (
-	// ConfigMap和Secret备份
+	// BackupTargetTypeConfig ConfigMap和Secret备份
 	BackupTargetTypeConfig BackupTargetType = "config"
-	// 数据库备份
+	// BackupTargetTypeDatabase 数据库备份
 	BackupTargetTypeDatabase BackupTargetType = "database"
-	// 系统目录备份
+	// BackupTargetTypeDirectory 系统目录备份
 	BackupTargetTypeDirectory BackupTargetType = "directory"
-	// NFS备份
+	// BackupTargetTypeNFS NFS备份
 	BackupTargetTypeNFS BackupTargetType = "nfs"
 )
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// 备份阶段
+// BackupPhase 备份阶段
 type BackupPhase string
 
 const (
-	// 备份任务创建
+	// BackupPhasePending 备份任务创建
 	BackupPhasePending BackupPhase = "Pending"
-	// 备份任务运行中
+	// BackupPhaseRunning 备份任务运行中
 	BackupPhaseRunning BackupPhase = "Running"
-	// 备份成功
+	// BackupPhaseCompleted 备份成功
 	BackupPhaseCompleted BackupPhase = "Completed"
-	// 备份失败
+	// BackupPhaseFailed 备份失败
 	BackupPhaseFailed BackupPhase = "Failed"
-	// 备份过期
+	// BackupPhaseExpired 备份过期
 	BackupPhaseExpired BackupPhase = "Expired"
 )
 
-// 远程存储类型
+// RemoteStorageType 远程存储类型
 type RemoteStorageType string
 
 const (
-	RemoteStorageTypeS3   RemoteStorageType = "s3"
+	// RemoteStorageTypeS3 S3存储
+	RemoteStorageTypeS3 RemoteStorageType = "s3"
+	// RemoteStorageTypeSFTP SFTP存储
 	RemoteStorageTypeSFTP RemoteStorageType = "sftp"
-	RemoteStorageTypeNFS  RemoteStorageType = "nfs"
-	RemoteStorageTypeSMB  RemoteStorageType = "smb"
+	// RemoteStorageTypeNFS NFS存储
+	RemoteStorageTypeNFS RemoteStorageType = "nfs"
+	// RemoteStorageTypeSMB SMB存储
+	RemoteStorageTypeSMB RemoteStorageType = "smb"
 )
 
-// BackupTaskSpec defines the desired state of BackupTask
+// BackupTaskSpec 定义备份任务的期望状态
+// +k8s:deepcopy-gen=true
 type BackupTaskSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-	// The following markers will use OpenAPI v3 schema to validate the value
-	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
-
-	// foo is an example field of BackupTask. Edit backuptask_types.go to remove/update
-	// +optional
+	// 备份计划，Cron表达式
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Pattern=`^(\*|([0-9]|1[0-9]|2[0-9]|3[0-9]|4[0-9]|5[0-9])|\*\/([0-9]|1[0-9]|2[0-9]|3[0-9]|4[0-9]|5[0-9])) (\*|([0-9]|1[0-9]|2[0-3])|\*\/([0-9]|1[0-9]|2[0-3])) (\*|([1-9]|1[0-9]|2[0-9]|3[0-1])|\*\/([1-9]|1[0-9]|2[0-9]|3[0-1])) (\*|([1-9]|1[0-2])|\*\/([1-9]|1[0-2])) (\*|([0-6])|\*\/([0-6]))$`
 	Schedule string `json:"schedule"`
 
 	// 备份保留策略
@@ -102,31 +85,35 @@ type BackupTaskSpec struct {
 	// 资源限制
 	// +optional
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
-	//Foo *string `json:"foo,omitempty"`
 }
-// 保留策略
+
+// RetentionPolicy 保留策略
+// +k8s:deepcopy-gen=true
 type RetentionPolicy struct {
 	// 保留天数
 	// +optional
 	MaxAgeDays *int32 `json:"maxAgeDays,omitempty"`
-	
+
 	// 保留备份数量
 	// +optional
 	MaxBackupCount *int32 `json:"maxBackupCount,omitempty"`
-	
+
 	// 保留最近的每小时/每天/每周备份
 	// +optional
 	KeepLast *KeepLastPolicy `json:"keepLast,omitempty"`
 }
-// KeepLastPolicy定义保留策略
+
+// KeepLastPolicy 定义保留策略
+// +k8s:deepcopy-gen=true
 type KeepLastPolicy struct {
-	Hours   int32 `json:"hours,omitempty"`
-	Days    int32 `json:"days,omitempty"`
-	Weeks   int32 `json:"weeks,omitempty"`
-	Months  int32 `json:"months,omitempty"`
+	Hours  int32 `json:"hours,omitempty"`
+	Days   int32 `json:"days,omitempty"`
+	Weeks  int32 `json:"weeks,omitempty"`
+	Months int32 `json:"months,omitempty"`
 }
 
-// 备份目标
+// BackupTarget 备份目标
+// +k8s:deepcopy-gen=true
 type BackupTarget struct {
 	// 目标名称
 	// +kubebuilder:validation:Required
@@ -155,7 +142,8 @@ type BackupTarget struct {
 	NFS *NFSBackupSpec `json:"nfs,omitempty"`
 }
 
-// 数据库备份配置
+// DatabaseBackupSpec 数据库备份配置
+// +k8s:deepcopy-gen=true
 type DatabaseBackupSpec struct {
 	// 数据库类型
 	// +kubebuilder:validation:Required
@@ -187,7 +175,8 @@ type DatabaseBackupSpec struct {
 	EnablePITR bool `json:"enablePITR,omitempty"`
 }
 
-// 配置备份配置
+// ConfigBackupSpec 配置备份配置
+// +k8s:deepcopy-gen=true
 type ConfigBackupSpec struct {
 	// 包含的命名空间（空表示所有）
 	// +optional
@@ -206,7 +195,8 @@ type ConfigBackupSpec struct {
 	LabelSelector *metav1.LabelSelector `json:"labelSelector,omitempty"`
 }
 
-// 目录备份配置
+// DirectoryBackupSpec 目录备份配置
+// +k8s:deepcopy-gen=true
 type DirectoryBackupSpec struct {
 	// 备份的目录路径（支持PVC挂载）
 	// +kubebuilder:validation:Required
@@ -221,7 +211,8 @@ type DirectoryBackupSpec struct {
 	CompressionLevel *int32 `json:"compressionLevel,omitempty"`
 }
 
-// 目录路径
+// DirectoryPath 目录路径
+// +k8s:deepcopy-gen=true
 type DirectoryPath struct {
 	// 路径
 	// +kubebuilder:validation:Required
@@ -236,7 +227,8 @@ type DirectoryPath struct {
 	SubPath string `json:"subPath,omitempty"`
 }
 
-// NFS备份配置
+// NFSBackupSpec NFS备份配置
+// +k8s:deepcopy-gen=true
 type NFSBackupSpec struct {
 	// NFS服务器地址
 	// +kubebuilder:validation:Required
@@ -255,7 +247,8 @@ type NFSBackupSpec struct {
 	SubPath string `json:"subPath,omitempty"`
 }
 
-// 远程存储配置
+// RemoteStorageSpec 远程存储配置
+// +k8s:deepcopy-gen=true
 type RemoteStorageSpec struct {
 	// 存储类型
 	// +kubebuilder:validation:Required
@@ -279,7 +272,8 @@ type RemoteStorageSpec struct {
 	SMB *SMBStorageSpec `json:"smb,omitempty"`
 }
 
-// S3存储配置
+// S3StorageSpec S3存储配置
+// +k8s:deepcopy-gen=true
 type S3StorageSpec struct {
 	// 端点URL
 	// +kubebuilder:validation:Required
@@ -310,7 +304,8 @@ type S3StorageSpec struct {
 	SkipTLSVerify *bool `json:"skipTLSVerify,omitempty"`
 }
 
-// SFTP存储配置
+// SFTPStorageSpec SFTP存储配置
+// +k8s:deepcopy-gen=true
 type SFTPStorageSpec struct {
 	// 服务器地址
 	// +kubebuilder:validation:Required
@@ -333,7 +328,8 @@ type SFTPStorageSpec struct {
 	SSHKeyType string `json:"sshKeyType,omitempty"`
 }
 
-// NFS存储配置
+// NFSStorageSpec NFS存储配置
+// +k8s:deepcopy-gen=true
 type NFSStorageSpec struct {
 	// 服务器地址
 	// +kubebuilder:validation:Required
@@ -348,7 +344,8 @@ type NFSStorageSpec struct {
 	MountOptions []string `json:"mountOptions,omitempty"`
 }
 
-// SMB存储配置
+// SMBStorageSpec SMB存储配置
+// +k8s:deepcopy-gen=true
 type SMBStorageSpec struct {
 	// 服务器地址
 	// +kubebuilder:validation:Required
@@ -371,7 +368,8 @@ type SMBStorageSpec struct {
 	Domain string `json:"domain,omitempty"`
 }
 
-// 加密配置
+// EncryptionSpec 加密配置
+// +k8s:deepcopy-gen=true
 type EncryptionSpec struct {
 	// 启用加密
 	// +kubebuilder:validation:Required
@@ -391,7 +389,8 @@ type EncryptionSpec struct {
 	EncryptAfterCompress *bool `json:"encryptAfterCompress,omitempty"`
 }
 
-// Pod模板规范
+// PodTemplateSpec Pod模板规范
+// +k8s:deepcopy-gen=true
 type PodTemplateSpec struct {
 	// 元数据
 	// +optional
@@ -402,7 +401,8 @@ type PodTemplateSpec struct {
 	Spec *corev1.PodSpec `json:"spec,omitempty"`
 }
 
-// 钩子规范
+// HookSpec 钩子规范
+// +k8s:deepcopy-gen=true
 type HookSpec struct {
 	// 钩子类型
 	// +kubebuilder:validation:Enum=exec;http
@@ -421,7 +421,8 @@ type HookSpec struct {
 	TimeoutSeconds *int32 `json:"timeoutSeconds,omitempty"`
 }
 
-// 执行钩子
+// ExecHook 执行钩子
+// +k8s:deepcopy-gen=true
 type ExecHook struct {
 	// 命令
 	Command []string `json:"command"`
@@ -431,7 +432,8 @@ type ExecHook struct {
 	Container string `json:"container,omitempty"`
 }
 
-// HTTP钩子
+// HTTPHook HTTP钩子
+// +k8s:deepcopy-gen=true
 type HTTPHook struct {
 	// URL
 	URL string `json:"url"`
@@ -449,36 +451,19 @@ type HTTPHook struct {
 	Body string `json:"body,omitempty"`
 }
 
-// HTTP头
+// HTTPHeader HTTP头
+// +k8s:deepcopy-gen=true
 type HTTPHeader struct {
 	Name  string `json:"name"`
 	Value string `json:"value"`
 }
 
-// BackupTaskStatus defines the observed state of BackupTask.
+// BackupTaskStatus 定义备份任务的观察状态
+// +k8s:deepcopy-gen=true
 type BackupTaskStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// For Kubernetes API conventions, see:
-	// https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#typical-status-properties
-
-	// conditions represent the current state of the BackupTask resource.
-	// Each condition has a unique type and reflects the status of a specific aspect of the resource.
-	//
-	// Standard condition types include:
-	// - "Available": the resource is fully functional
-	// - "Progressing": the resource is being created or updated
-	// - "Degraded": the resource failed to reach or maintain its desired state
-	//
-	// The status of each condition is one of True, False, or Unknown.
-	// +listType=map
-	// +listMapKey=type
-	// +optional
-	// Conditions []metav1.Condition `json:"conditions,omitempty"`
 	// 观察到的生成
 	// +optional
-	ObservedGeneration []int64 `json:"observedGeneration,omitempty"`
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
 	// 备份阶段
 	// +optional
@@ -513,7 +498,8 @@ type BackupTaskStatus struct {
 	NextScheduleTime *metav1.Time `json:"nextScheduleTime,omitempty"`
 }
 
-// BackupTaskCondition定义备份任务的条件
+// BackupTaskCondition 定义备份任务的条件
+// +k8s:deepcopy-gen=true
 type BackupTaskCondition struct {
 	// 类型
 	Type BackupTaskConditionType `json:"type"`
@@ -534,48 +520,32 @@ type BackupTaskCondition struct {
 	Message string `json:"message,omitempty"`
 }
 
-// 备份任务条件类型
+// BackupTaskConditionType 备份任务条件类型
 type BackupTaskConditionType string
 
 const (
-	// 备份任务已调度
+	// BackupTaskScheduled 备份任务已调度
 	BackupTaskScheduled BackupTaskConditionType = "Scheduled"
-	// 备份任务运行中
+	// BackupTaskRunning 备份任务运行中
 	BackupTaskRunning BackupTaskConditionType = "Running"
-	// 备份任务完成
+	// BackupTaskCompleted 备份任务完成
 	BackupTaskCompleted BackupTaskConditionType = "Completed"
-	// 备份任务失败
+	// BackupTaskFailed 备份任务失败
 	BackupTaskFailed BackupTaskConditionType = "Failed"
-	// 保留策略已应用
+	// BackupTaskRetentionApplied 保留策略已应用
 	BackupTaskRetentionApplied BackupTaskConditionType = "RetentionApplied"
 )
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:shortName=bt
+// +kubebuilder:resource:shortName=bt;backuptask
 // +kubebuilder:printcolumn:name="Schedule",type="string",JSONPath=".spec.schedule"
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"
 // +kubebuilder:printcolumn:name="Last Success",type="date",JSONPath=".status.lastSuccessfulTime"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
-// +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
-
-// BackupTask is the Schema for the backuptasks API
+// BackupTask 是备份任务的Schema
 type BackupTask struct {
-	// metav1.TypeMeta `json:",inline"`
-
-	// metadata is a standard object metadata
-	// +optional
-	// metav1.ObjectMeta `json:"metadata,omitzero"`
-
-	// spec defines the desired state of BackupTask
-	// +required
-	// Spec BackupTaskSpec `json:"spec"`
-
-	// status defines the observed state of BackupTask
-	// +optional
-	// Status BackupTaskStatus `json:"status,omitzero"`
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
@@ -585,16 +555,9 @@ type BackupTask struct {
 
 // +kubebuilder:object:root=true
 
-// BackupTaskList contains a list of BackupTask
+// BackupTaskList 包含BackupTask列表
 type BackupTaskList struct {
-	// metav1.TypeMeta `json:",inline"`
-	// metav1.ListMeta `json:"metadata,omitzero"`
-	// Items           []BackupTask `json:"items"`
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []BackupTask `json:"items"`
-}
-
-func init() {
-	SchemeBuilder.Register(&BackupTask{}, &BackupTaskList{})
 }

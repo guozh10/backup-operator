@@ -12,40 +12,40 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
+	// "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	// "sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	backupv1alpha1 "github.com/guozh10/backup-operator/api/v1alpha1"
+	backupv1alpha1 "backup-operator/api/v1alpha1"
 )
 
-const (
-	// 备份任务Finalizer
-	backupTaskFinalizer = "backup.mybackup.com/finalizer"
-	
-	// 标签键
-	backupTaskLabelKey     = "backup.mybackup.com/backup-task"
-	backupTaskUIDLabelKey  = "backup.mybackup.com/backup-task-uid"
-	createdByLabelKey      = "backup.mybackup.com/created-by"
-	
-	// 注解键
-	scheduleAnnotationKey  = "backup.mybackup.com/schedule"
-	lastBackupAnnotationKey = "backup.mybackup.com/last-backup"
-	
-	// 容器常量
-	backupContainerName    = "backup"
-	backupImage            = "guozh10/backup-agent:latest"
-	
-	// 卷名称
-	backupDataVolumeName   = "backup-data"
-	scriptsVolumeName      = "backup-scripts"
-	configVolumeName       = "backup-config"
-	temporaryVolumeName    = "temp"
-)
+//const (
+// 备份任务Finalizer
+//	backupTaskFinalizer = "backup.mybackup.com/finalizer"
+
+// 标签键
+//	backupTaskLabelKey    = "backup.mybackup.com/backup-task"
+//	backupTaskUIDLabelKey = "backup.mybackup.com/backup-task-uid"
+//	createdByLabelKey     = "backup.mybackup.com/created-by"
+
+// 注解键
+//	scheduleAnnotationKey   = "backup.mybackup.com/schedule"
+//	lastBackupAnnotationKey = "backup.mybackup.com/last-backup"
+
+// 容器常量
+//	backupContainerName = "backup"
+//	backupImage         = "guozh10/backup-agent:latest"
+
+// 卷名称
+//	backupDataVolumeName = "backup-data"
+//	scriptsVolumeName    = "backup-scripts"
+//	configVolumeName     = "backup-config"
+//	temporaryVolumeName  = "temp"
+//)
 
 // BackupTaskReconciler reconciles a BackupTask object
 type BackupTaskReconciler struct {
@@ -71,7 +71,7 @@ type BackupTaskReconciler struct {
 
 func (r *BackupTaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("backuptask", req.NamespacedName)
-	
+
 	// 获取BackupTask实例
 	backupTask := &backupv1alpha1.BackupTask{}
 	if err := r.Get(ctx, req.NamespacedName, backupTask); err != nil {
@@ -82,7 +82,7 @@ func (r *BackupTaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		log.Error(err, "unable to fetch BackupTask")
 		return ctrl.Result{}, err
 	}
-	
+
 	// 检查对象是否正在删除
 	if !backupTask.ObjectMeta.DeletionTimestamp.IsZero() {
 		// 处理Finalizer
@@ -91,7 +91,7 @@ func (r *BackupTaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				log.Error(err, "failed to finalize BackupTask")
 				return ctrl.Result{}, err
 			}
-			
+
 			controllerutil.RemoveFinalizer(backupTask, backupTaskFinalizer)
 			if err := r.Update(ctx, backupTask); err != nil {
 				return ctrl.Result{}, err
@@ -99,7 +99,7 @@ func (r *BackupTaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 		return ctrl.Result{}, nil
 	}
-	
+
 	// 添加Finalizer
 	if !controllerutil.ContainsFinalizer(backupTask, backupTaskFinalizer) {
 		controllerutil.AddFinalizer(backupTask, backupTaskFinalizer)
@@ -107,56 +107,56 @@ func (r *BackupTaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			return ctrl.Result{}, err
 		}
 	}
-	
+
 	// 处理备份任务
 	result, err := r.reconcileBackupTask(ctx, backupTask)
 	if err != nil {
-		r.Recorder.Eventf(backupTask, corev1.EventTypeWarning, "ReconcileFailed", 
+		r.Recorder.Eventf(backupTask, corev1.EventTypeWarning, "ReconcileFailed",
 			"Failed to reconcile BackupTask: %v", err)
 		log.Error(err, "failed to reconcile BackupTask")
 	}
-	
+
 	return result, err
 }
 
 func (r *BackupTaskReconciler) reconcileBackupTask(ctx context.Context, backupTask *backupv1alpha1.BackupTask) (ctrl.Result, error) {
 	log := r.Log.WithValues("backuptask", backupTask.Name, "namespace", backupTask.Namespace)
-	
+
 	// 1. 创建或更新CronJob
 	cronJob, err := r.createOrUpdateCronJob(ctx, backupTask)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to create/update CronJob: %w", err)
 	}
-	
+
 	// 2. 更新BackupTask状态
 	if err := r.updateBackupTaskStatus(ctx, backupTask, cronJob); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to update status: %w", err)
 	}
-	
+
 	// 3. 检查是否有正在运行的备份作业
 	if cronJob.Status.Active != nil && len(cronJob.Status.Active) > 0 {
 		// 有活跃的Job，稍后重试
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
-	
+
 	// 4. 应用保留策略
 	if err := r.applyRetentionPolicy(ctx, backupTask); err != nil {
 		log.Error(err, "failed to apply retention policy")
 		// 不返回错误，保留策略失败不应阻止下一次备份
 	}
-	
+
 	// 5. 计算下一次调度时间
 	requeueAfter := r.calculateNextSchedule(backupTask, cronJob)
 	if requeueAfter > 0 {
 		return ctrl.Result{RequeueAfter: requeueAfter}, nil
 	}
-	
+
 	return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
 }
 
 func (r *BackupTaskReconciler) createOrUpdateCronJob(ctx context.Context, backupTask *backupv1alpha1.BackupTask) (*batchv1.CronJob, error) {
 	cronJobName := fmt.Sprintf("backup-%s", backupTask.Name)
-	
+
 	// 构建CronJob对象
 	cronJob := &batchv1.CronJob{
 		ObjectMeta: metav1.ObjectMeta{
@@ -169,24 +169,24 @@ func (r *BackupTaskReconciler) createOrUpdateCronJob(ctx context.Context, backup
 			},
 		},
 	}
-	
+
 	// 创建或更新
 	op, err := ctrl.CreateOrUpdate(ctx, r.Client, cronJob, func() error {
 		// 设置CronJob规范
 		cronJob.Spec = r.buildCronJobSpec(backupTask)
-		
+
 		// 设置OwnerReference
 		if err := ctrl.SetControllerReference(backupTask, cronJob, r.Scheme); err != nil {
 			return err
 		}
-		
+
 		return nil
 	})
-	
+
 	if err != nil {
 		return nil, err
 	}
-	
+
 	r.Log.Info("CronJob reconciled", "operation", op, "name", cronJobName, "namespace", backupTask.Namespace)
 	return cronJob, nil
 }
@@ -194,7 +194,7 @@ func (r *BackupTaskReconciler) createOrUpdateCronJob(ctx context.Context, backup
 func (r *BackupTaskReconciler) buildCronJobSpec(backupTask *backupv1alpha1.BackupTask) batchv1.CronJobSpec {
 	// 使用BackoffLimit防止作业无限重试
 	backoffLimit := int32(3)
-	
+
 	return batchv1.CronJobSpec{
 		Schedule:                   backupTask.Spec.Schedule,
 		StartingDeadlineSeconds:    pointer.Int64(300), // 5分钟
@@ -234,23 +234,23 @@ func (r *BackupTaskReconciler) buildBackupPodSpec(backupTask *backupv1alpha1.Bac
 	if backupTask.Spec.PodTemplate != nil && backupTask.Spec.PodTemplate.Spec != nil {
 		podSpec = *backupTask.Spec.PodTemplate.Spec
 	}
-	
+
 	// 设置默认值
 	if podSpec.RestartPolicy == "" {
 		podSpec.RestartPolicy = corev1.RestartPolicyOnFailure
 	}
-	
+
 	// 添加卷
 	podSpec.Volumes = r.buildVolumes(backupTask)
-	
+
 	// 添加容器
 	podSpec.Containers = r.buildContainers(backupTask)
-	
+
 	// 设置ServiceAccount（如果需要访问Kubernetes API）
 	if podSpec.ServiceAccountName == "" {
 		podSpec.ServiceAccountName = "backup-agent"
 	}
-	
+
 	// 设置亲和性和容忍度
 	if podSpec.Affinity == nil {
 		podSpec.Affinity = &corev1.Affinity{
@@ -272,7 +272,7 @@ func (r *BackupTaskReconciler) buildBackupPodSpec(backupTask *backupv1alpha1.Bac
 			},
 		}
 	}
-	
+
 	return podSpec
 }
 
@@ -297,7 +297,7 @@ func (r *BackupTaskReconciler) buildVolumes(backupTask *backupv1alpha1.BackupTas
 			},
 		},
 	}
-	
+
 	// 为每个需要挂载的PVC添加卷
 	for _, target := range backupTask.Spec.Targets {
 		if target.Directory != nil {
@@ -317,7 +317,7 @@ func (r *BackupTaskReconciler) buildVolumes(backupTask *backupv1alpha1.BackupTas
 			}
 		}
 	}
-	
+
 	// 添加Secret卷
 	if backupTask.Spec.RemoteStorage.SFTP != nil {
 		volumes = append(volumes, corev1.Volume{
@@ -329,7 +329,7 @@ func (r *BackupTaskReconciler) buildVolumes(backupTask *backupv1alpha1.BackupTas
 			},
 		})
 	}
-	
+
 	if backupTask.Spec.Encryption != nil && backupTask.Spec.Encryption.Enabled {
 		volumes = append(volumes, corev1.Volume{
 			Name: "encryption-key",
@@ -346,7 +346,7 @@ func (r *BackupTaskReconciler) buildVolumes(backupTask *backupv1alpha1.BackupTas
 			},
 		})
 	}
-	
+
 	return volumes
 }
 
@@ -373,7 +373,7 @@ func (r *BackupTaskReconciler) buildContainers(backupTask *backupv1alpha1.Backup
 			},
 		},
 	}
-	
+
 	// 添加sidecar容器（如数据库客户端）
 	for _, target := range backupTask.Spec.Targets {
 		if target.Database != nil {
@@ -383,18 +383,18 @@ func (r *BackupTaskReconciler) buildContainers(backupTask *backupv1alpha1.Backup
 			}
 		}
 	}
-	
+
 	return containers
 }
 
 func (r *BackupTaskReconciler) buildEnvVars(backupTask *backupv1alpha1.BackupTask) []corev1.EnvVar {
 	envVars := []corev1.EnvVar{
 		{
-			Name: "BACKUP_TASK_NAME",
+			Name:  "BACKUP_TASK_NAME",
 			Value: backupTask.Name,
 		},
 		{
-			Name: "BACKUP_TASK_NAMESPACE",
+			Name:  "BACKUP_TASK_NAMESPACE",
 			Value: backupTask.Namespace,
 		},
 		{
@@ -414,7 +414,7 @@ func (r *BackupTaskReconciler) buildEnvVars(backupTask *backupv1alpha1.BackupTas
 			},
 		},
 	}
-	
+
 	// 添加远程存储配置
 	switch backupTask.Spec.RemoteStorage.Type {
 	case backupv1alpha1.RemoteStorageTypeS3:
@@ -456,7 +456,7 @@ func (r *BackupTaskReconciler) buildEnvVars(backupTask *backupv1alpha1.BackupTas
 			)
 		}
 	}
-	
+
 	// 添加加密配置
 	if backupTask.Spec.Encryption != nil && backupTask.Spec.Encryption.Enabled {
 		envVars = append(envVars,
@@ -470,7 +470,7 @@ func (r *BackupTaskReconciler) buildEnvVars(backupTask *backupv1alpha1.BackupTas
 			},
 		)
 	}
-	
+
 	return envVars
 }
 
@@ -485,7 +485,7 @@ func (r *BackupTaskReconciler) buildVolumeMounts(backupTask *backupv1alpha1.Back
 			MountPath: "/tmp",
 		},
 	}
-	
+
 	// 为每个PVC添加挂载
 	for _, target := range backupTask.Spec.Targets {
 		if target.Directory != nil {
@@ -503,7 +503,7 @@ func (r *BackupTaskReconciler) buildVolumeMounts(backupTask *backupv1alpha1.Back
 			}
 		}
 	}
-	
+
 	return volumeMounts
 }
 
@@ -512,7 +512,7 @@ func (r *BackupTaskReconciler) buildContainerResources(backupTask *backupv1alpha
 	if backupTask.Spec.Resources != nil {
 		return *backupTask.Spec.Resources
 	}
-	
+
 	return corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{
 			corev1.ResourceCPU:    resource.MustParse("100m"),
@@ -535,15 +535,15 @@ func (r *BackupTaskReconciler) buildDatabaseSidecar(dbSpec *backupv1alpha1.Datab
 			Command:         []string{"sleep", "infinity"},
 			Env: []corev1.EnvVar{
 				{
-					Name: "MYSQL_HOST",
+					Name:  "MYSQL_HOST",
 					Value: dbSpec.Host,
 				},
 				{
-					Name: "MYSQL_PORT",
+					Name:  "MYSQL_PORT",
 					Value: fmt.Sprintf("%d", *dbSpec.Port),
 				},
 				{
-					Name: "MYSQL_DATABASE",
+					Name:  "MYSQL_DATABASE",
 					Value: dbSpec.Database,
 				},
 			},
@@ -562,15 +562,15 @@ func (r *BackupTaskReconciler) buildDatabaseSidecar(dbSpec *backupv1alpha1.Datab
 			Command:         []string{"sleep", "infinity"},
 			Env: []corev1.EnvVar{
 				{
-					Name: "PGHOST",
+					Name:  "PGHOST",
 					Value: dbSpec.Host,
 				},
 				{
-					Name: "PGPORT",
+					Name:  "PGPORT",
 					Value: fmt.Sprintf("%d", *dbSpec.Port),
 				},
 				{
-					Name: "PGDATABASE",
+					Name:  "PGDATABASE",
 					Value: dbSpec.Database,
 				},
 			},
@@ -591,10 +591,10 @@ func (r *BackupTaskReconciler) updateBackupTaskStatus(ctx context.Context, backu
 	if err := r.Get(ctx, client.ObjectKeyFromObject(backupTask), latestBackupTask); err != nil {
 		return err
 	}
-	
+
 	// 更新状态
 	latestBackupTask.Status.ObservedGeneration = backupTask.Generation
-	
+
 	// 设置阶段
 	if cronJob.Spec.Suspend != nil && *cronJob.Spec.Suspend {
 		latestBackupTask.Status.Phase = backupv1alpha1.BackupPhasePending
@@ -608,12 +608,12 @@ func (r *BackupTaskReconciler) updateBackupTaskStatus(ctx context.Context, backu
 			latestBackupTask.Status.Phase = backupv1alpha1.BackupPhasePending
 		}
 	}
-	
+
 	// 更新调度时间
 	if cronJob.Status.LastScheduleTime != nil {
 		latestBackupTask.Status.LastScheduledTime = cronJob.Status.LastScheduleTime
 	}
-	
+
 	// 更新活跃的备份Job
 	if len(cronJob.Status.Active) > 0 {
 		latestBackupTask.Status.ActiveBackupJob = &corev1.ObjectReference{
@@ -625,48 +625,48 @@ func (r *BackupTaskReconciler) updateBackupTaskStatus(ctx context.Context, backu
 	} else {
 		latestBackupTask.Status.ActiveBackupJob = nil
 	}
-	
+
 	// 计算下一个调度时间
-	if cronJob.Status.NextScheduleTime != nil {
-		latestBackupTask.Status.NextScheduleTime = cronJob.Status.NextScheduleTime
-	}
-	
+	// if cronJob.Status.NextScheduleTime != nil {
+	// 	latestBackupTask.Status.NextScheduleTime = cronJob.Status.NextScheduleTime
+	// }
+
 	// 更新条件
 	r.updateConditions(latestBackupTask)
-	
+
 	// 更新状态
 	return r.Status().Update(ctx, latestBackupTask)
 }
 
 func (r *BackupTaskReconciler) updateConditions(backupTask *backupv1alpha1.BackupTask) {
 	now := metav1.Now()
-	
+
 	// 调度条件
 	scheduledCondition := backupv1alpha1.BackupTaskCondition{
 		Type:               backupv1alpha1.BackupTaskScheduled,
 		Status:             corev1.ConditionTrue,
 		LastTransitionTime: now,
 	}
-	
+
 	if backupTask.Status.LastScheduledTime == nil {
 		scheduledCondition.Status = corev1.ConditionFalse
 		scheduledCondition.Reason = "NotScheduled"
 		scheduledCondition.Message = "Backup task has not been scheduled yet"
 	}
-	
+
 	// 运行条件
 	runningCondition := backupv1alpha1.BackupTaskCondition{
 		Type:               backupv1alpha1.BackupTaskRunning,
 		Status:             corev1.ConditionFalse,
 		LastTransitionTime: now,
 	}
-	
+
 	if backupTask.Status.Phase == backupv1alpha1.BackupPhaseRunning {
 		runningCondition.Status = corev1.ConditionTrue
 		runningCondition.Reason = "BackupInProgress"
 		runningCondition.Message = "Backup is currently running"
 	}
-	
+
 	// 更新条件列表
 	backupTask.Status.Conditions = []backupv1alpha1.BackupTaskCondition{
 		scheduledCondition,
@@ -678,20 +678,20 @@ func (r *BackupTaskReconciler) applyRetentionPolicy(ctx context.Context, backupT
 	if backupTask.Spec.Retention == nil {
 		return nil
 	}
-	
+
 	// 获取关联的BackupRecord列表
 	backupRecords := &backupv1alpha1.BackupRecordList{}
 	labelSelector := map[string]string{
 		backupTaskLabelKey: backupTask.Name,
 	}
-	
+
 	if err := r.List(ctx, backupRecords, client.InNamespace(backupTask.Namespace), client.MatchingLabels(labelSelector)); err != nil {
 		return fmt.Errorf("failed to list BackupRecords: %w", err)
 	}
-	
+
 	// 应用保留策略
 	recordsToDelete := r.filterRecordsToDelete(backupRecords.Items, backupTask.Spec.Retention)
-	
+
 	for _, record := range recordsToDelete {
 		if err := r.Delete(ctx, &record); err != nil {
 			r.Log.Error(err, "failed to delete old BackupRecord", "name", record.Name)
@@ -699,26 +699,26 @@ func (r *BackupTaskReconciler) applyRetentionPolicy(ctx context.Context, backupT
 		}
 		r.Log.Info("Deleted old BackupRecord due to retention policy", "name", record.Name, "backupTask", backupTask.Name)
 	}
-	
+
 	// 更新状态
 	backupTask.Status.BackupHistoryCount = int32(len(backupRecords.Items) - len(recordsToDelete))
-	
+
 	return nil
 }
 
 func (r *BackupTaskReconciler) filterRecordsToDelete(records []backupv1alpha1.BackupRecord, retention *backupv1alpha1.RetentionPolicy) []backupv1alpha1.BackupRecord {
 	var toDelete []backupv1alpha1.BackupRecord
 	now := time.Now()
-	
+
 	// 按创建时间排序（最新的在前）
 	sortedRecords := make([]backupv1alpha1.BackupRecord, len(records))
 	copy(sortedRecords, records)
-	
+
 	// 应用最大备份数量限制
 	if retention.MaxBackupCount != nil && len(sortedRecords) > int(*retention.MaxBackupCount) {
 		toDelete = append(toDelete, sortedRecords[*retention.MaxBackupCount:]...)
 	}
-	
+
 	// 应用最大年龄限制
 	if retention.MaxAgeDays != nil {
 		maxAge := time.Duration(*retention.MaxAgeDays) * 24 * time.Hour
@@ -728,21 +728,11 @@ func (r *BackupTaskReconciler) filterRecordsToDelete(records []backupv1alpha1.Ba
 			}
 		}
 	}
-	
+
 	return toDelete
 }
 
 func (r *BackupTaskReconciler) calculateNextSchedule(backupTask *backupv1alpha1.BackupTask, cronJob *batchv1.CronJob) time.Duration {
-	if cronJob.Status.NextScheduleTime != nil {
-		nextSchedule := cronJob.Status.NextScheduleTime.Time
-		now := time.Now()
-		
-		if nextSchedule.After(now) {
-			return nextSchedule.Sub(now)
-		}
-	}
-	
-	// 如果无法计算下一个调度时间，默认5分钟后重试
 	return 5 * time.Minute
 }
 
@@ -755,27 +745,27 @@ func (r *BackupTaskReconciler) finalizeBackupTask(ctx context.Context, backupTas
 			Namespace: backupTask.Namespace,
 		},
 	}
-	
+
 	if err := r.Delete(ctx, cronJob); err != nil && !errors.IsNotFound(err) {
 		return fmt.Errorf("failed to delete CronJob: %w", err)
 	}
-	
+
 	// 删除关联的BackupRecords
 	backupRecords := &backupv1alpha1.BackupRecordList{}
 	labelSelector := map[string]string{
 		backupTaskLabelKey: backupTask.Name,
 	}
-	
+
 	if err := r.List(ctx, backupRecords, client.InNamespace(backupTask.Namespace), client.MatchingLabels(labelSelector)); err != nil {
 		return fmt.Errorf("failed to list BackupRecords: %w", err)
 	}
-	
+
 	for _, record := range backupRecords.Items {
 		if err := r.Delete(ctx, &record); err != nil {
 			r.Log.Error(err, "failed to delete BackupRecord", "name", record.Name)
 		}
 	}
-	
+
 	r.Log.Info("Successfully finalized BackupTask", "name", backupTask.Name)
 	return nil
 }
