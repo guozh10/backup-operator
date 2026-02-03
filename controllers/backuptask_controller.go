@@ -70,18 +70,21 @@ type BackupTaskReconciler struct {
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 func (r *BackupTaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := r.Log.WithValues("backuptask", req.NamespacedName)
-
+	log := ctrl.Log.WithValues("backuptask", req.NamespacedName)
+        // 重要：添加日志输出
+        log.Info("Reconcile called", "name", req.Name, "namespace", req.Namespace)
+	log.Info("开始处理 BackupTask")
 	// 获取BackupTask实例
 	backupTask := &backupv1alpha1.BackupTask{}
 	if err := r.Get(ctx, req.NamespacedName, backupTask); err != nil {
 		if errors.IsNotFound(err) {
 			// 对象被删除
+			log.Error(err, "无法获取 BackupTask")
 			return ctrl.Result{}, nil
 		}
-		log.Error(err, "unable to fetch BackupTask")
 		return ctrl.Result{}, err
 	}
+        log.Info("Processing BackupTask", "schedule", backupTask.Spec.Schedule,"targets", len(backupTask.Spec.Targets))
 
 	// 检查对象是否正在删除
 	if !backupTask.ObjectMeta.DeletionTimestamp.IsZero() {
@@ -117,10 +120,11 @@ func (r *BackupTaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	return result, err
+	
 }
 
 func (r *BackupTaskReconciler) reconcileBackupTask(ctx context.Context, backupTask *backupv1alpha1.BackupTask) (ctrl.Result, error) {
-	log := r.Log.WithValues("backuptask", backupTask.Name, "namespace", backupTask.Namespace)
+	log := ctrl.Log.WithValues("backuptask", backupTask.Name, "namespace", backupTask.Namespace)
 
 	// 1. 创建或更新CronJob
 	cronJob, err := r.createOrUpdateCronJob(ctx, backupTask)
@@ -187,7 +191,7 @@ func (r *BackupTaskReconciler) createOrUpdateCronJob(ctx context.Context, backup
 		return nil, err
 	}
 
-	r.Log.Info("CronJob reconciled", "operation", op, "name", cronJobName, "namespace", backupTask.Namespace)
+	ctrl.Log.Info("CronJob reconciled", "operation", op, "name", cronJobName, "namespace", backupTask.Namespace)
 	return cronJob, nil
 }
 
@@ -697,7 +701,7 @@ func (r *BackupTaskReconciler) applyRetentionPolicy(ctx context.Context, backupT
 			r.Log.Error(err, "failed to delete old BackupRecord", "name", record.Name)
 			continue
 		}
-		r.Log.Info("Deleted old BackupRecord due to retention policy", "name", record.Name, "backupTask", backupTask.Name)
+		ctrl.Log.Info("Deleted old BackupRecord due to retention policy", "name", record.Name, "backupTask", backupTask.Name)
 	}
 
 	// 更新状态
@@ -762,11 +766,11 @@ func (r *BackupTaskReconciler) finalizeBackupTask(ctx context.Context, backupTas
 
 	for _, record := range backupRecords.Items {
 		if err := r.Delete(ctx, &record); err != nil {
-			r.Log.Error(err, "failed to delete BackupRecord", "name", record.Name)
+			ctrl.Log.Error(err, "failed to delete BackupRecord", "name", record.Name)
 		}
 	}
 
-	r.Log.Info("Successfully finalized BackupTask", "name", backupTask.Name)
+	ctrl.Log.Info("Successfully finalized BackupTask", "name", backupTask.Name)
 	return nil
 }
 

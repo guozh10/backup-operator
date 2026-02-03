@@ -1,0 +1,30 @@
+apiVersion: backup.mybackup.com/v1alpha1
+kind: Backuptask
+metadata:
+  name: nfs-share-backup
+  namespace: default
+spec:
+  schedule: "0 4 * * 0"  # 每周日凌晨4点
+  retention:
+    maxAgeDays: 90
+  targets:
+    - name: shared-data
+      type: nfs
+      nfs:
+        server: "10.0.0.100"
+        path: "/shared/data"
+        mountOptions:
+          - "hard"
+          - "intr"
+          - "nolock"
+        subPath: "documents"
+  remoteStorage:
+    type: s3
+    s3:
+      endpoint: "s3.amazonaws.com"
+      bucket: "backup-bucket"
+      region: "us-west-2"
+      prefix: "nfs-backups/"
+      authSecretRef:
+        name: s3-credentials
+        namespace: default

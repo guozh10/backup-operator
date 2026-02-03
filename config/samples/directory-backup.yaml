@@ -1,0 +1,33 @@
+apiVersion: backup.mybackup.com/v1alpha1
+kind: Backuptask
+metadata:
+  name: directory-backup
+  namespace: default
+spec:
+  schedule: "0 3 * * *"
+  retention:
+    maxBackupCount: 7
+  targets:
+    - name: app-logs
+      type: directory
+      directory:
+        paths:
+          - path: "/var/log/app"
+            pvcRef:
+              apiGroup: ""
+              kind: PersistentVolumeClaim
+              name: app-logs-pvc
+          - path: "/var/log/nginx"
+        excludePatterns:
+          - "*.tmp"
+          - "*.log.?"
+        compressionLevel: 6
+  remoteStorage:
+    type: sftp
+    sftp:
+      host: "sftp.backup.example.com"
+      port: 22
+      path: "/backups/app-logs"
+      authSecretRef:
+        name: sftp-credentials
+        namespace: default

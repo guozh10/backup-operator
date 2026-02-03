@@ -1,0 +1,36 @@
+apiVersion: backup.mybackup.com/v1alpha1
+kind: Backuptask
+metadata:
+  name: k8s-config-backup
+  namespace: kube-system
+spec:
+  schedule: "*/30 * * * *"  # 每30分钟
+  retention:
+    maxBackupCount: 100
+  targets:
+    - name: cluster-config
+      type: config
+      config:
+        includeNamespaces: []  # 空表示所有命名空间
+        excludeNamespaces:
+          - "kube-system"
+          - "kube-public"
+        resourceTypes:
+          - "configmap"
+          - "secret"
+          - "deployment"
+          - "service"
+          - "ingress"
+        labelSelector:
+          matchLabels:
+            backup: "true"
+  remoteStorage:
+    type: s3
+    s3:
+      endpoint: "s3.amazonaws.com"
+      bucket: "cluster-backups"
+      region: "us-east-1"
+      prefix: "config-backups/"
+      authSecretRef:
+        name: cluster-backup-credentials
+        namespace: kube-system

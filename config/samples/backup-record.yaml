@@ -1,0 +1,16 @@
+apiVersion: backup.mybackup.com/v1alpha1
+kind: Backuprecord
+metadata:
+  name: manual-backup-20240129
+  namespace: default
+spec:
+  # BackupRecord 的具体字段根据你的定义
+  # 这里只是示例
+  taskRef:
+    name: test-backup
+    namespace: default
+  status: "Completed"
+  startTime: "2024-01-29T10:00:00Z"
+  completionTime: "2024-01-29T10:05:00Z"
+  size: "1.5GB"
+  location: "s3://my-backup-bucket/test-backup/20240129-100000.tar.gz"

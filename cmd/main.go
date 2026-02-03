@@ -34,7 +34,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
-
+	
+	// "go.uber.org/zap/zapcore"
 	backupv1alpha1 "backup-operator/api/v1alpha1"
 	"backup-operator/internal/controller"
 	webhookv1alpha1 "backup-operator/internal/webhook/v1alpha1"
@@ -86,6 +87,7 @@ func main() {
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
 	opts := zap.Options{
 		Development: true,
+		// Level:       zap.NewAtomicLevelAt(zapcore.DebugLevel),
 	}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
@@ -186,6 +188,7 @@ func main() {
 	if err := (&controller.BackupTaskReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+		// Log:    ctrl.Log.WithName("controllers").WithName("BackupTask"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "BackupTask")
 		os.Exit(1)

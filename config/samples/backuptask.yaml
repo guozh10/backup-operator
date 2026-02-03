@@ -1,0 +1,67 @@
+apiVersion: backup.mybackup.com/v1alpha1
+kind: Backuptask
+metadata:
+  name: test-backup
+  namespace: default
+spec:
+  schedule: "*/5 * * * *"  # 每5分钟一次，用于测试
+  retention:
+    maxBackupCount: 3
+  targets:
+    - name: config-backup
+      type: config
+      config:
+        includeNamespaces: ["default"]
+        resourceTypes: ["configmap", "secret"]
+    - name: mysql-database
+      type: database
+      database:
+        type: mysql
+        host: 192.168.0.221
+        port: 13306
+        database: mysql
+        authSecretRef:
+          name: mysql-credentials
+          namespace: backup-system
+        enablePITR: true
+        extraArgs:
+          - "--single-transaction"
+          - "--quick"
+  remoteStorage:
+    type: nfs
+    nfs:
+      # NFS 服务器地址
+      server: "192.168.1.100"
+      # NFS 共享路径
+      path: "/data/backups"
+      # 挂载选项（可选）
+      mountOptions:
+        - "hard"
+        - "intr"
+        - "nolock"
+        - "rsize=32768"
+        - "wsize=32768"
+    # type: s3
+    # s3:
+    #   endpoint: "s3.amazonaws.com"
+    #   bucket: "my-backup-bucket"
+    #   region: "us-east-1"
+    #   authSecretRef:
+    #     name: s3-credentials
+    #     namespace: defaul
+  # 加密配置
+  encryption:
+    enabled: true
+    algorithm: "aes-256-gcm"
+    keySecretRef:
+      name: backup-encryption-key
+      namespace: backup-system
+  
+  # 资源限制
+  resources:
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+    requests:
+      cpu: "200m"
+      memory: "256Mi"
