@@ -1,3 +1,4 @@
+// +groupName=backup.mybackup.com
 package v1alpha1
 
 import (
@@ -560,4 +561,10 @@ type BackupTaskList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []BackupTask `json:"items"`
+}
+
+func init() {
+	SchemeBuilder.Register(&BackupTask{}, &BackupTaskList{})
+	// 如果还有其他类型，也需要注册
+	SchemeBuilder.Register(&BackupRecord{}, &BackupRecordList{})
 }

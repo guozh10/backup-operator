@@ -35,9 +35,9 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	backupv1alpha1 "operator/backup-operator/api/v1alpha1"
-	"operator/backup-operator/internal/controller"
-	webhookv1alpha1 "operator/backup-operator/internal/webhook/v1alpha1"
+	backupv1alpha1 "backup-operator/api/v1alpha1"
+	"backup-operator/internal/controller"
+	webhookv1alpha1 "backup-operator/internal/webhook/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -51,6 +51,10 @@ func init() {
 
 	utilruntime.Must(backupv1alpha1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
+	// 2. 注册 Kubernetes 核心类型
+	// _ = clientgoscheme.AddToScheme(scheme)
+	// 3. 注册你的 API 类型（关键步骤！）
+	// _ = v1alpha1.AddToScheme(scheme)
 }
 
 // nolint:gocyclo

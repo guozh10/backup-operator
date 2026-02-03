@@ -1,3 +1,4 @@
+// +groupName=backup.mybackup.com
 package v1alpha1
 
 import (

@@ -20,7 +20,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	backupv1alpha1 "operator/backup-operator/api/v1alpha1"
+	backupv1alpha1 "backup-operator/api/v1alpha1"
 	// TODO (user): Add any additional imports if needed
 )
 

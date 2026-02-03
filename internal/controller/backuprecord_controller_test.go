@@ -27,7 +27,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	backupv1alpha1 "operator/backup-operator/api/v1alpha1"
+	backupv1alpha1 "backup-operator/api/v1alpha1"
 )
 
 var _ = Describe("BackupRecord Controller", func() {

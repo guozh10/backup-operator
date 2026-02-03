@@ -1,4 +1,4 @@
-module operator/backup-operator
+module backup-operator
 
 go 1.24.3
 

@@ -30,7 +30,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"operator/backup-operator/test/utils"
+	"backup-operator/test/utils"
 )
 
 // namespace where the project is deployed in

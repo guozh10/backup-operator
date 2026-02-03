@@ -26,7 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	backupv1alpha1 "operator/backup-operator/api/v1alpha1"
+	backupv1alpha1 "backup-operator/api/v1alpha1"
 )
 
 // nolint:unused

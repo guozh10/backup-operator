@@ -24,7 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	backupv1alpha1 "operator/backup-operator/api/v1alpha1"
+	backupv1alpha1 "backup-operator/api/v1alpha1"
 )
 
 // BackupRecordReconciler reconciles a BackupRecord object
