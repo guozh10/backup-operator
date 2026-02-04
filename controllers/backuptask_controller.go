@@ -71,8 +71,8 @@ type BackupTaskReconciler struct {
 
 func (r *BackupTaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := ctrl.Log.WithValues("backuptask", req.NamespacedName)
-        // 重要：添加日志输出
-        log.Info("Reconcile called", "name", req.Name, "namespace", req.Namespace)
+	// 重要：添加日志输出
+	log.Info("Reconcile called", "name", req.Name, "namespace", req.Namespace)
 	log.Info("开始处理 BackupTask")
 	// 获取BackupTask实例
 	backupTask := &backupv1alpha1.BackupTask{}
@@ -84,7 +84,7 @@ func (r *BackupTaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 		return ctrl.Result{}, err
 	}
-        log.Info("Processing BackupTask", "schedule", backupTask.Spec.Schedule,"targets", len(backupTask.Spec.Targets))
+	log.Info("Processing BackupTask", "schedule", backupTask.Spec.Schedule, "targets", len(backupTask.Spec.Targets))
 
 	// 检查对象是否正在删除
 	if !backupTask.ObjectMeta.DeletionTimestamp.IsZero() {
@@ -120,7 +120,7 @@ func (r *BackupTaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	return result, err
-	
+
 }
 
 func (r *BackupTaskReconciler) reconcileBackupTask(ctx context.Context, backupTask *backupv1alpha1.BackupTask) (ctrl.Result, error) {

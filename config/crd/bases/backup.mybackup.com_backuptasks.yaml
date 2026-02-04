@@ -48,6 +48,12 @@ spec:
           spec:
             description: BackupTaskSpec 定义备份任务的期望状态
             properties:
+              backupCmd:
+                default: /backup/scripts/backup.sh
+                type: string
+              backupImage:
+                default: backup-agent:latest
+                type: string
               encryption:
                 description: 加密配置
                 properties:

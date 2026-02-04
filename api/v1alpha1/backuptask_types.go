@@ -86,6 +86,12 @@ type BackupTaskSpec struct {
 	// 资源限制
 	// +optional
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default:="backup-agent:latest"
+	BackupImage string `json:"backupImage,omitempty"`
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default:="/backup/scripts/backup.sh"
+	BackupCmd string `json:"backupCmd,omitempty"`
 }
 
 // RetentionPolicy 保留策略
