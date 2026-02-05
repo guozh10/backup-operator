@@ -94,6 +94,7 @@ type BackupTaskSpec struct {
 	BackupCmd string `json:"backupCmd,omitempty"`
 }
 
+
 // RetentionPolicy 保留策略
 // +k8s:deepcopy-gen=true
 type RetentionPolicy struct {

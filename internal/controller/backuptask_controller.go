@@ -4,7 +4,8 @@ import (
 	"context"
 	"fmt"
 	"time"
-
+        "encoding/json"
+        "strconv"
 	"github.com/go-logr/logr"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -68,7 +69,7 @@ type BackupTaskReconciler struct {
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
-
+//+kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 func (r *BackupTaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := ctrl.Log.WithValues("backuptask", req.NamespacedName)
 	// 重要：添加日志输出
@@ -110,6 +111,22 @@ func (r *BackupTaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			return ctrl.Result{}, err
 		}
 	}
+    	// 创建或更新 ConfigMap
+    	configMap, err := r.createTargetConfigMap(backupTask)
+    	if err != nil {
+        	return ctrl.Result{}, err
+    	}
+    
+    	// 创建 ConfigMap
+    	if err := r.Create(ctx, configMap); err != nil {
+        	if !errors.IsAlreadyExists(err) {
+            	return ctrl.Result{}, err
+        	}
+        	// 如果已存在，则更新
+        	if err := r.Update(ctx, configMap); err != nil {
+            	return ctrl.Result{}, err
+        	}
+    	}
 
 	// 处理备份任务
 	result, err := r.reconcileBackupTask(ctx, backupTask)
@@ -300,6 +317,22 @@ func (r *BackupTaskReconciler) buildVolumes(backupTask *backupv1alpha1.BackupTas
 				},
 			},
 		},
+		{       Name: configVolumeName,
+        		VolumeSource: corev1.VolumeSource{
+            			ConfigMap: &corev1.ConfigMapVolumeSource{
+                			LocalObjectReference: corev1.LocalObjectReference{
+                    			Name: r.getTargetConfigMapName(backupTask),
+                			},
+                			// 可选：指定要挂载的 key
+                			Items: []corev1.KeyToPath{
+                    				{Key:  "targets.json",Path: "targets.json",},
+						{Key:  "remotestorage.json",Path: "remotestorage.json",},
+   					},
+                			// 可选：设置默认权限
+                			DefaultMode: pointer.Int32(0644),
+            			},
+        		},
+		},
 	}
 
 	// 为每个需要挂载的PVC添加卷
@@ -354,6 +387,10 @@ func (r *BackupTaskReconciler) buildVolumes(backupTask *backupv1alpha1.BackupTas
 	return volumes
 }
 
+func (r *BackupTaskReconciler) getTargetConfigMapName(backupTask *backupv1alpha1.BackupTask) string {
+    return fmt.Sprintf("%s-targets", backupTask.Name)
+}
+
 func (r *BackupTaskReconciler) getBackupImage(backupTask *backupv1alpha1.BackupTask) string {
 	if backupTask.Spec.BackupImage != "" {
 		return backupTask.Spec.BackupImage
@@ -378,20 +415,25 @@ func (r *BackupTaskReconciler) buildContainers(backupTask *backupv1alpha1.Backup
 			Env:             r.buildEnvVars(backupTask),
 			VolumeMounts:    r.buildVolumeMounts(backupTask),
 			Resources:       r.buildContainerResources(backupTask),
-			SecurityContext: &corev1.SecurityContext{
-				AllowPrivilegeEscalation: pointer.Bool(false),
-				RunAsNonRoot:             pointer.Bool(true),
-				RunAsUser:                pointer.Int64(1000),
-				Capabilities: &corev1.Capabilities{
-					Drop: []corev1.Capability{"ALL"},
-				},
-				SeccompProfile: &corev1.SeccompProfile{
-					Type: corev1.SeccompProfileTypeRuntimeDefault,
-				},
-			},
+			// SecurityContext: &corev1.SecurityContext{
+			// 	AllowPrivilegeEscalation: pointer.Bool(false),
+			//	RunAsNonRoot:             pointer.Bool(true),
+			//	RunAsUser:                pointer.Int64(1000),
+			//	Capabilities: &corev1.Capabilities{
+			//		Drop: []corev1.Capability{"ALL"},
+			//	},
+			//	SeccompProfile: &corev1.SeccompProfile{
+			//		Type: corev1.SeccompProfileTypeRuntimeDefault,
+			//	},
+			//},
 		},
 	}
-
+        for c := range containers {
+                // 设置默认的 imagePullPolicy
+                if containers[c].ImagePullPolicy == "" {
+                        containers[c].ImagePullPolicy = corev1.PullAlways
+                }
+        }
 	// 添加sidecar容器（如数据库客户端）
 	// for _, target := range backupTask.Spec.Targets {
 	// 	if target.Database != nil {
@@ -501,6 +543,11 @@ func (r *BackupTaskReconciler) buildVolumeMounts(backupTask *backupv1alpha1.Back
 		{
 			Name:      temporaryVolumeName,
 			MountPath: "/tmp",
+		},
+		{
+			Name:     configVolumeName ,
+        		MountPath: "/etc/backup/config",
+        		ReadOnly:  true,
 		},
 	}
 
@@ -787,6 +834,51 @@ func (r *BackupTaskReconciler) finalizeBackupTask(ctx context.Context, backupTas
 	ctrl.Log.Info("Successfully finalized BackupTask", "name", backupTask.Name)
 	return nil
 }
+// createTargetConfigMap
+func (r *BackupTaskReconciler) createTargetConfigMap(backupTask *backupv1alpha1.BackupTask) (*corev1.ConfigMap, error) {
+    configMap := &corev1.ConfigMap{
+        ObjectMeta: metav1.ObjectMeta{
+            Name:      fmt.Sprintf("%s-targets", backupTask.Name),
+            Namespace: backupTask.Namespace,
+            Labels: map[string]string{
+                "app":        "backup-operator",
+                "backuptask": backupTask.Name,
+            },
+        },
+        Data: make(map[string]string),
+    }
+
+    // 序列化每个 target 为单独的 JSON 文件
+    // for i, target := range backupTask.Spec.Targets {
+    //    targetJSON, err := json.MarshalIndent(target, "", "  ")
+    //    if err != nil {
+            // 记录错误但继续处理其他 targets
+    //        r.Log.Error(err, "Failed to marshal target", "target", target.Name)
+    //        continue
+    //    }
+    //    configMap.Data[fmt.Sprintf("target-%d.json", i)] = string(targetJSON)
+    //}
+
+    // 同时存储整个 targets 数组
+    allTargetsJSON, err := json.MarshalIndent(backupTask.Spec.Targets, "", "  ")
+    if err != nil {
+        return nil, err
+    }
+    configMap.Data["targets.json"] = string(allTargetsJSON)
+
+    allRemoteStorageJSON, err := json.MarshalIndent(backupTask.Spec.RemoteStorage, "", "  ")
+    if err != nil {
+        return nil, err
+    }
+    configMap.Data["remotestorage.json"] = string(allRemoteStorageJSON)
+    
+    // 添加一些元数据
+    configMap.Data["target-count"] = strconv.Itoa(len(backupTask.Spec.Targets))
+    // configMap.Data["backup-task-name"] = backupTask.Name
+
+    return configMap, nil
+}
+
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *BackupTaskReconciler) SetupWithManager(mgr ctrl.Manager) error {
