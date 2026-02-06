@@ -1,0 +1,193 @@
+apiVersion: backup.mybackup.com/v1alpha1
+kind: BackupTask
+metadata:
+  name: comprehensive-backup-example
+  namespace: backup-system
+  labels:
+    app: backup-operator
+    environment: production
+  annotations:
+    description: "综合备份任务示例，包含多种备份类型"
+spec:
+  # 备份计划 - 每天凌晨2点执行
+  schedule: "0 2 * * *"
+  
+  # 备份镜像和命令（可选，有默认值）
+  backupImage: "easzlab.io.local:5000/devops/backup-agent:latest"
+  backupCmd: "/backup/scripts/backup.sh"
+  
+  # 保留策略
+  retention:
+    maxAgeDays: 30  # 保留30天
+    maxBackupCount: 10  # 最多保留10个备份
+    keepLast:
+      days: 7  # 保留最近7天的每日备份
+      weeks: 4  # 保留最近4周的每周备份
+      months: 3  # 保留最近3月的每月备份
+  
+  # 资源限制
+  resources:
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"
+    requests:
+      cpu: "200m"
+      memory: "256Mi"
+  
+  # 加密配置
+  encryption:
+    enabled: true
+    algorithm: "aes-256-gcm"
+    keySecretRef:
+      name: "backup-encryption-key"
+      namespace: "backup-system"
+    encryptAfterCompress: true
+  
+  # 远程存储配置 - NFS
+  remoteStorage:
+    type: nfs
+    nfs:
+      server: "192.168.0.222"
+      path: "/data/nfs/backups"
+      mountOptions:
+        - "hard"
+        - "intr"
+        - "nolock"
+        - "rsize=32768"
+        - "wsize=32768"
+  
+  # 备份目标列表
+  targets:
+    
+    # 目标1: 数据库备份 - MySQL
+    - name: "production-mysql"
+      type: database
+      database:
+        type: "mysql"
+        host: "mysql.production.svc.cluster.local"
+        port: 3306
+        database: "appdb"
+        authSecretRef:
+          name: "mysql-credentials"
+          namespace: "backup-system"
+        extraArgs:
+          - "--single-transaction"
+          - "--quick"
+          - "--routines"
+          - "--events"
+        enablePITR: true
+    
+    # 目标2: 数据库备份 - PostgreSQL
+    - name: "production-postgres"
+      type: database
+      database:
+        type: "postgresql"
+        host: "postgresql.production.svc.cluster.local"
+        port: 5432
+        database: "appdb"
+        authSecretRef:
+          name: "postgres-credentials"
+          namespace: "backup-system"
+        extraArgs:
+          - "--clean"
+          - "--if-exists"
+    
+    # 目标3: 配置资源备份
+    - name: "kubernetes-config"
+      type: config
+      config:
+        includeNamespaces:
+          - "production"
+          - "staging"
+        excludeNamespaces:
+          - "kube-system"
+          - "kube-public"
+        resourceTypes:
+          - "configmap"
+          - "secret"
+          - "deployment"
+          - "service"
+        labelSelector:
+          matchLabels:
+            app: "important"
+          matchExpressions:
+            - key: "environment"
+              operator: In
+              values: ["production", "staging"]
+    
+    # 目标4: 目录备份（从PVC挂载）
+    - name: "app-logs"
+      type: directory
+      directory:
+        paths:
+          # pvc模式
+          - path: "/var/log/app"
+            pvcRef:
+              apiGroup: ""
+              kind: PersistentVolumeClaim
+              name: "app-logs-pvc"
+            subPath: "logs"
+          - path: "/data/uploads"
+            pvcRef:
+              apiGroup: ""
+              kind: PersistentVolumeClaim
+              name: "uploads-pvc"
+          # 系统目录模式
+          - path: "/data/download"
+        excludePatterns:
+          - "*.tmp"
+          - "*.temp"
+          - "*.log.*"
+        compressionLevel: 6
+    
+    # 目标5: NFS共享备份
+    - name: "shared-nfs"
+      type: nfs
+      nfs:
+        server: "192.168.1.100"
+        path: "/data/shared"
+        mountOptions:
+          - "vers=4.1"
+          - "noatime"
+        subPath: "documents"
+  
+  # Pod模板配置（可选）
+  podTemplate:
+    metadata:
+      labels:
+        backup-type: "comprehensive"
+        priority: "high"
+    spec:
+      nodeSelector:
+        backup-node: "true"
+      tolerations:
+        - key: "backup"
+          operator: "Exists"
+          effect: "NoSchedule"
+      imagePullSecrets:
+        - name: "registry-credentials"
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+  
+  # 备份后钩子（可选）
+  postBackupHooks:
+    - type: "exec"
+      exec:
+        command:
+          - "/bin/sh"
+          - "-c"
+          - "echo 'Backup completed at $(date)' | mail -s 'Backup Notification' admin@example.com"
+        container: "backup"
+      timeoutSeconds: 30
+    - type: "http"
+      http:
+        url: "http://webhook.example.com/backup-complete"
+        method: "POST"
+        headers:
+          - name: "Content-Type"
+            value: "application/json"
+          - name: "X-Api-Key"
+            value: "secret-key"
+        body: '{"backup_name": "$(BACKUP_NAME)", "status": "completed"}'

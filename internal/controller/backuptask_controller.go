@@ -6,6 +6,7 @@ import (
 	"time"
         "encoding/json"
         "strconv"
+	"strings"
 	"github.com/go-logr/logr"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -334,56 +335,6 @@ func (r *BackupTaskReconciler) buildVolumes(backupTask *backupv1alpha1.BackupTas
         		},
 		},
 	}
-
-	// 为每个需要挂载的PVC添加卷
-	for _, target := range backupTask.Spec.Targets {
-		if target.Directory != nil {
-			for _, dirPath := range target.Directory.Paths {
-				if dirPath.PVCRef != nil {
-					volumeName := fmt.Sprintf("pvc-%s", dirPath.PVCRef.Name)
-					volumes = append(volumes, corev1.Volume{
-						Name: volumeName,
-						VolumeSource: corev1.VolumeSource{
-							PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-								ClaimName: dirPath.PVCRef.Name,
-								ReadOnly:  true,
-							},
-						},
-					})
-				}
-			}
-		}
-	}
-
-	// 添加Secret卷
-	if backupTask.Spec.RemoteStorage.SFTP != nil {
-		volumes = append(volumes, corev1.Volume{
-			Name: "sftp-secret",
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: backupTask.Spec.RemoteStorage.SFTP.AuthSecretRef.Name,
-				},
-			},
-		})
-	}
-
-	if backupTask.Spec.Encryption != nil && backupTask.Spec.Encryption.Enabled {
-		volumes = append(volumes, corev1.Volume{
-			Name: "encryption-key",
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: backupTask.Spec.Encryption.KeySecretRef.Name,
-					Items: []corev1.KeyToPath{
-						{
-							Key:  "key",
-							Path: "encryption.key",
-						},
-					},
-				},
-			},
-		})
-	}
-
 	return volumes
 }
 
@@ -410,22 +361,12 @@ func (r *BackupTaskReconciler) buildContainers(backupTask *backupv1alpha1.Backup
 		{
 			Name:            backupContainerName,
 			Image:           r.getBackupImage(backupTask),
-			ImagePullPolicy: corev1.PullIfNotPresent,
+			// ImagePullPolicy: corev1.PullIfNotPresent,
 			Command:         []string{"/bin/bash", "-c", r.getBackupCmd(backupTask)},
 			Env:             r.buildEnvVars(backupTask),
+			EnvFrom:         r.buildEnvFrom(backupTask), // 从Secret导入环境变量
 			VolumeMounts:    r.buildVolumeMounts(backupTask),
 			Resources:       r.buildContainerResources(backupTask),
-			// SecurityContext: &corev1.SecurityContext{
-			// 	AllowPrivilegeEscalation: pointer.Bool(false),
-			//	RunAsNonRoot:             pointer.Bool(true),
-			//	RunAsUser:                pointer.Int64(1000),
-			//	Capabilities: &corev1.Capabilities{
-			//		Drop: []corev1.Capability{"ALL"},
-			//	},
-			//	SeccompProfile: &corev1.SeccompProfile{
-			//		Type: corev1.SeccompProfileTypeRuntimeDefault,
-			//	},
-			//},
 		},
 	}
         for c := range containers {
@@ -434,16 +375,6 @@ func (r *BackupTaskReconciler) buildContainers(backupTask *backupv1alpha1.Backup
                         containers[c].ImagePullPolicy = corev1.PullAlways
                 }
         }
-	// 添加sidecar容器（如数据库客户端）
-	// for _, target := range backupTask.Spec.Targets {
-	// 	if target.Database != nil {
-	// 		sidecar := r.buildDatabaseSidecar(target.Database)
-	// 		if sidecar != nil {
-	// 			containers = append(containers, *sidecar)
-	// 		}
-	// 	}
-	// }
-
 	return containers
 }
 
@@ -474,64 +405,54 @@ func (r *BackupTaskReconciler) buildEnvVars(backupTask *backupv1alpha1.BackupTas
 			},
 		},
 	}
-
-	// 添加远程存储配置
-	switch backupTask.Spec.RemoteStorage.Type {
-	case backupv1alpha1.RemoteStorageTypeS3:
-		if backupTask.Spec.RemoteStorage.S3 != nil {
-			envVars = append(envVars,
-				corev1.EnvVar{
-					Name:  "REMOTE_STORAGE_TYPE",
-					Value: "s3",
-				},
-				corev1.EnvVar{
-					Name:  "S3_ENDPOINT",
-					Value: backupTask.Spec.RemoteStorage.S3.Endpoint,
-				},
-				corev1.EnvVar{
-					Name:  "S3_BUCKET",
-					Value: backupTask.Spec.RemoteStorage.S3.Bucket,
-				},
-				corev1.EnvVar{
-					Name:  "S3_PREFIX",
-					Value: backupTask.Spec.RemoteStorage.S3.Prefix,
-				},
-			)
-		}
-	case backupv1alpha1.RemoteStorageTypeSFTP:
-		if backupTask.Spec.RemoteStorage.SFTP != nil {
-			envVars = append(envVars,
-				corev1.EnvVar{
-					Name:  "REMOTE_STORAGE_TYPE",
-					Value: "sftp",
-				},
-				corev1.EnvVar{
-					Name:  "SFTP_HOST",
-					Value: backupTask.Spec.RemoteStorage.SFTP.Host,
-				},
-				corev1.EnvVar{
-					Name:  "SFTP_PATH",
-					Value: backupTask.Spec.RemoteStorage.SFTP.Path,
-				},
-			)
-		}
-	}
-
-	// 添加加密配置
-	if backupTask.Spec.Encryption != nil && backupTask.Spec.Encryption.Enabled {
-		envVars = append(envVars,
-			corev1.EnvVar{
-				Name:  "ENCRYPTION_ENABLED",
-				Value: "true",
-			},
-			corev1.EnvVar{
-				Name:  "ENCRYPTION_ALGORITHM",
-				Value: backupTask.Spec.Encryption.Algorithm,
-			},
-		)
-	}
-
 	return envVars
+}
+
+
+func (r *BackupTaskReconciler) buildEnvFrom(backupTask *backupv1alpha1.BackupTask) []corev1.EnvFromSource {
+    envFrom := []corev1.EnvFromSource{}
+    
+    // 1. 从 encryption.keySecretRef 读取加密密钥 Secret
+    if backupTask.Spec.Encryption != nil && backupTask.Spec.Encryption.KeySecretRef.Name != "" {
+        secretRef := backupTask.Spec.Encryption.KeySecretRef
+        secretName := secretRef.Name
+        
+        envFrom = append(envFrom, corev1.EnvFromSource{
+            Prefix: "ENCRYPTION_",
+            SecretRef: &corev1.SecretEnvSource{
+                LocalObjectReference: corev1.LocalObjectReference{
+                    Name: secretName,
+                },
+                Optional: pointer.Bool(true),
+            },
+        })
+    }
+    
+    // 2. 从 targets 中读取数据库认证 Secret
+    for i, target := range backupTask.Spec.Targets {
+        if target.Type == "database" && target.Database != nil && target.Database.AuthSecretRef.Name != "" {
+            // 删除未使用的 i 变量，或者使用下划线忽略
+            _ = i // 如果不需要 i，可以用下划线忽略
+            
+            secretRef := target.Database.AuthSecretRef
+            secretName := secretRef.Name
+            
+            // 使用 target 名称创建唯一前缀，避免冲突
+            prefix := fmt.Sprintf("DB_%s_", strings.ToUpper(strings.ReplaceAll(target.Name, "-", "_")))
+            
+            envFrom = append(envFrom, corev1.EnvFromSource{
+                Prefix: prefix,
+                SecretRef: &corev1.SecretEnvSource{
+                    LocalObjectReference: corev1.LocalObjectReference{
+                        Name: secretName,
+                    },
+                    Optional: pointer.Bool(true),
+                },
+            })
+        }
+    }
+    
+    return envFrom
 }
 
 func (r *BackupTaskReconciler) buildVolumeMounts(backupTask *backupv1alpha1.BackupTask) []corev1.VolumeMount {
@@ -550,25 +471,6 @@ func (r *BackupTaskReconciler) buildVolumeMounts(backupTask *backupv1alpha1.Back
         		ReadOnly:  true,
 		},
 	}
-
-	// 为每个PVC添加挂载
-	for _, target := range backupTask.Spec.Targets {
-		if target.Directory != nil {
-			for i, dirPath := range target.Directory.Paths {
-				if dirPath.PVCRef != nil {
-					volumeName := fmt.Sprintf("pvc-%s", dirPath.PVCRef.Name)
-					mountPath := fmt.Sprintf("/mnt/pvc-%d", i)
-					volumeMounts = append(volumeMounts, corev1.VolumeMount{
-						Name:      volumeName,
-						MountPath: mountPath,
-						SubPath:   dirPath.SubPath,
-						ReadOnly:  true,
-					})
-				}
-			}
-		}
-	}
-
 	return volumeMounts
 }
 
@@ -590,65 +492,6 @@ func (r *BackupTaskReconciler) buildContainerResources(backupTask *backupv1alpha
 	}
 }
 
-func (r *BackupTaskReconciler) buildDatabaseSidecar(dbSpec *backupv1alpha1.DatabaseBackupSpec) *corev1.Container {
-	switch dbSpec.Type {
-	case "mysql":
-		return &corev1.Container{
-			Name:            "mysql-client",
-			Image:           "mysql:8.0",
-			ImagePullPolicy: corev1.PullIfNotPresent,
-			Command:         []string{"sleep", "infinity"},
-			Env: []corev1.EnvVar{
-				{
-					Name:  "MYSQL_HOST",
-					Value: dbSpec.Host,
-				},
-				{
-					Name:  "MYSQL_PORT",
-					Value: fmt.Sprintf("%d", *dbSpec.Port),
-				},
-				{
-					Name:  "MYSQL_DATABASE",
-					Value: dbSpec.Database,
-				},
-			},
-			Resources: corev1.ResourceRequirements{
-				Requests: corev1.ResourceList{
-					corev1.ResourceCPU:    resource.MustParse("50m"),
-					corev1.ResourceMemory: resource.MustParse("128Mi"),
-				},
-			},
-		}
-	case "postgresql":
-		return &corev1.Container{
-			Name:            "postgres-client",
-			Image:           "postgres:14",
-			ImagePullPolicy: corev1.PullIfNotPresent,
-			Command:         []string{"sleep", "infinity"},
-			Env: []corev1.EnvVar{
-				{
-					Name:  "PGHOST",
-					Value: dbSpec.Host,
-				},
-				{
-					Name:  "PGPORT",
-					Value: fmt.Sprintf("%d", *dbSpec.Port),
-				},
-				{
-					Name:  "PGDATABASE",
-					Value: dbSpec.Database,
-				},
-			},
-			Resources: corev1.ResourceRequirements{
-				Requests: corev1.ResourceList{
-					corev1.ResourceCPU:    resource.MustParse("50m"),
-					corev1.ResourceMemory: resource.MustParse("128Mi"),
-				},
-			},
-		}
-	}
-	return nil
-}
 
 func (r *BackupTaskReconciler) updateBackupTaskStatus(ctx context.Context, backupTask *backupv1alpha1.BackupTask, cronJob *batchv1.CronJob) error {
 	// 获取最新的BackupTask
@@ -847,17 +690,6 @@ func (r *BackupTaskReconciler) createTargetConfigMap(backupTask *backupv1alpha1.
         },
         Data: make(map[string]string),
     }
-
-    // 序列化每个 target 为单独的 JSON 文件
-    // for i, target := range backupTask.Spec.Targets {
-    //    targetJSON, err := json.MarshalIndent(target, "", "  ")
-    //    if err != nil {
-            // 记录错误但继续处理其他 targets
-    //        r.Log.Error(err, "Failed to marshal target", "target", target.Name)
-    //        continue
-    //    }
-    //    configMap.Data[fmt.Sprintf("target-%d.json", i)] = string(targetJSON)
-    //}
 
     // 同时存储整个 targets 数组
     allTargetsJSON, err := json.MarshalIndent(backupTask.Spec.Targets, "", "  ")

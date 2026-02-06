@@ -1,0 +1,121 @@
+apiVersion: backup.mybackup.com/v1alpha1
+kind: BackupTask
+metadata:
+  name: basic-backup
+  namespace: backup-system
+spec:
+  # 每30分钟执行一次
+  schedule: "*/30 * * * *"
+  
+  # 保留3个备份
+  retention:
+    maxBackupCount: 3
+  
+  # 使用NFS存储
+  remoteStorage:
+    type: nfs
+    nfs:
+      server: "192.168.0.222"
+      path: "/data/nfs/backups"
+  
+  # 启用加密
+  encryption:
+    enabled: true
+    algorithm: "aes-256-gcm"
+    keySecretRef:
+      name: "backup-encryption-key"
+      namespace: "backup-system"
+  
+  # 只备份MySQL数据库
+  targets:
+    - name: "mysql-backup"
+      type: database
+      database:
+        type: "mysql"
+        host: "mysql.production.svc.cluster.local"
+        port: 3306
+        database: "appdb"
+        authSecretRef:
+          name: "mysql-credentials"
+          namespace: "backup-system"
+        extraArgs:
+          - "--single-transaction"
+
+---
+apiVersion: backup.mybackup.com/v1alpha1
+kind: BackupTask
+metadata:
+  name: config-backup-only
+  namespace: backup-system
+spec:
+  schedule: "0 3 * * *"
+
+  retention:
+    maxAgeDays: 90
+
+  remoteStorage:
+    type: s3
+    s3:
+      endpoint: "https://s3.amazonaws.com"
+      bucket: "my-backup-bucket"
+      region: "us-east-1"
+      authSecretRef:
+        name: "aws-s3-credentials"
+        namespace: "backup-system"
+
+  targets:
+    - name: "all-configs"
+      type: config
+      config:
+        resourceTypes:
+          - "configmap"
+          - "secret"
+---
+apiVersion: backup.mybackup.com/v1alpha1
+kind: BackupTask
+metadata:
+  name: multi-database-backup
+  namespace: backup-system
+spec:
+  schedule: "0 1 * * *"
+  
+  remoteStorage:
+    type: nfs
+    nfs:
+      server: "192.168.0.222"
+      path: "/data/nfs/backups"
+  
+  targets:
+    - name: "user-db"
+      type: database
+      database:
+        type: "mysql"
+        host: "user-db.production.svc.cluster.local"
+        port: 3306
+        database: "userdb"
+        authSecretRef:
+          name: "user-db-credentials"
+          namespace: "backup-system"
+    
+    - name: "order-db"
+      type: database
+      database:
+        type: "mysql"
+        host: "order-db.production.svc.cluster.local"
+        port: 3306
+        database: "orderdb"
+        authSecretRef:
+          name: "order-db-credentials"
+          namespace: "backup-system"
+    
+    - name: "analytics-db"
+      type: database
+      database:
+        type: "postgresql"
+        host: "analytics-db.production.svc.cluster.local"
+        port: 5432
+        database: "analytics"
+        authSecretRef:
+          name: "analytics-db-credentials"
+          namespace: "backup-system"
+
