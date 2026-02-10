@@ -117,6 +117,27 @@ is manually re-applied afterwards.
 
 More information can be found via the [Kubebuilder Documentation](https://book.kubebuilder.io/introduction.html)
 
+## Deploy in other clusters
+
+1. Build backup-operator
+```sh
+docker build -t easzlab.io.local:5000/devops/backup-operator:latest .
+```
+2. create crd
+```sh
+kubectl apply -f config/crd/bases/backup.mybackup.com_backuptasks.yaml
+```
+3. deploy rbac
+```sh
+kubectl apply -f config/rbac/service_account.yaml
+kubectl apply -f config/rbac/role.yaml
+kubectl apply -f config/rbac/role_binding.yaml
+```
+4. deploy backup-operator deployment
+```sh
+kubectl apply -f config/manager/manager.yaml
+```
+
 ## License
 
 Copyright 2026.
