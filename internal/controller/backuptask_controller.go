@@ -335,6 +335,42 @@ func (r *BackupTaskReconciler) buildVolumes(backupTask *backupv1alpha1.BackupTas
         		},
 		},
 	}
+
+        // 为每个需要挂载的PVC添加卷
+        for _, target := range backupTask.Spec.Targets {
+                if target.Directory != nil {
+                        for _, dirPath := range target.Directory.Paths {
+                                if dirPath.PVCRef != nil {
+                                        volumeName := fmt.Sprintf("pvc-%s", dirPath.PVCRef.Name)
+                                        volumes = append(volumes, corev1.Volume{
+                                                Name: volumeName,
+                                                VolumeSource: corev1.VolumeSource{
+                                                        PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+                                                                ClaimName: dirPath.PVCRef.Name,
+                                                                ReadOnly:  true,
+                                                        },
+                                                },
+                                        })
+                                }
+                        }
+                }
+        }
+
+	    // 添加NFS volume用于远程存储
+       if backupTask.Spec.RemoteStorage.Type == backupv1alpha1.RemoteStorageTypeNFS &&
+       		backupTask.Spec.RemoteStorage.NFS != nil {
+
+        	nfsVolume := corev1.Volume{
+            		Name: "nfs-storage",
+            		VolumeSource: corev1.VolumeSource{
+                		NFS: &corev1.NFSVolumeSource{
+                    		Server: backupTask.Spec.RemoteStorage.NFS.Server,
+                    		Path:   backupTask.Spec.RemoteStorage.NFS.Path,
+                		},
+            		},
+        	}
+        	volumes = append(volumes, nfsVolume)
+	}
 	return volumes
 }
 
@@ -471,6 +507,35 @@ func (r *BackupTaskReconciler) buildVolumeMounts(backupTask *backupv1alpha1.Back
         		ReadOnly:  true,
 		},
 	}
+    	// 挂载NFS volume
+    	if backupTask.Spec.RemoteStorage.Type == backupv1alpha1.RemoteStorageTypeNFS && 
+       		backupTask.Spec.RemoteStorage.NFS != nil {
+       	 
+        		nfsMount := corev1.VolumeMount{
+            			Name:      "nfs-storage",
+            			MountPath: "/mnt/nfs-backup", // 在容器中挂载到此处
+        		}
+        	volumeMounts = append(volumeMounts, nfsMount)
+    	}
+
+        // 为每个PVC添加挂载
+        for _, target := range backupTask.Spec.Targets {
+                if target.Directory != nil {
+                        for _, dirPath := range target.Directory.Paths {
+                                if dirPath.PVCRef != nil {
+                                        volumeName := fmt.Sprintf("pvc-%s", dirPath.PVCRef.Name)
+                                        mountPath := fmt.Sprintf("%s", dirPath.Path)
+                                        volumeMounts = append(volumeMounts, corev1.VolumeMount{
+                                                Name:      volumeName,
+                                                MountPath: mountPath,
+                                                SubPath:   dirPath.SubPath,
+                                                ReadOnly:  true,
+                                        })
+                                }
+                        }
+                }
+        }
+
 	return volumeMounts
 }
 
