@@ -138,6 +138,22 @@ kubectl apply -f config/rbac/role_binding.yaml
 kubectl apply -f config/manager/manager.yaml
 ```
 
+## deploy agent
+1. The deployment of RBAC is to back up the default deployment of Kubernetes resources under the backup-system namespace
+```sh
+config/rbac/backup_agent_service_account.yaml
+```
+2. The password part involved is passed in the environment variable of the container using the secret method. First, we need to create a secret configuration, such as the user and password used when backing up the database
+```sh
+sh config/samples/create_secret.sh
+```
+3. When deploying a CR instance, it can be done under any namespace, and by default, an agent job is created under the backup-system namespace
+If backup PVCs cannot be mounted across namespaces, you can only choose to specify a specific namespace when deploying CR instances
+```sh
+kubectl apply -f config/samples/backuptask.yaml
+kubectl apply -f config/rbac/backup_agent_service_account.yaml
+```
+
 ## License
 
 Copyright 2026.
