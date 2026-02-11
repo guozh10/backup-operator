@@ -51,7 +51,7 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=ref,event=branch
             # type=sha,prefix=
-            type=raw,value=latest,enable={{branch == 'master'}}
+            type=raw,value=latest,enable=${{ github.ref_name == 'master' || github.ref_name == 'main' }}
 
       # 构建并推送多架构镜像
       - name: Build and push Docker image
