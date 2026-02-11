@@ -1,18 +1,66 @@
-name: Docker Image CI
+name: Build and Push Multi-Arch Docker Image
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "main", "master" ]
+    tags: [ "v*" ]
   pull_request:
-    branches: [ "master" ]
+    branches: [ "main", "master" ]
+
+env:
+  REGISTRY: ghcr.io
+  # 将 <OWNER> 替换为你的 GitHub 用户名或组织名，全小写
+  IMAGE_NAME: ${{ github.repository_owner }}/devops/backup-operator
 
 jobs:
-
   build:
-
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write   # 允许推送 ghcr.io
+      id-token: write
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Build the Docker image
-      run: docker build . --file Dockerfile --tag guozh10:v1
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 安装 QEMU 以支持多架构模拟
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      # 设置 Docker Buildx，启用多架构构建
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 登录 GitHub Container Registry
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 提取 Docker 元数据（标签、版本等）
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=ref,event=branch
+            type=sha,prefix=
+
+      # 构建并推送多架构镜像
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile   # 如果你的 Dockerfile 不在根目录，请修改路径
+          platforms: linux/amd64,linux/arm64   # 按需添加更多架构，如 linux/arm/v7
+          push: ${{ github.event_name != 'pull_request' }}   # PR 时只构建不推送
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
