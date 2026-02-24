@@ -420,7 +420,7 @@ func (r *BackupTaskReconciler) buildEnvVars(backupTask *backupv1alpha1.BackupTas
 			Name:  "BACKUP_TASK_NAME",
 			Value: backupTask.Name,
 		},
-		{
+		{ 
 			Name:  "BACKUP_TASK_NAMESPACE",
 			Value: backupTask.Namespace,
 		},
@@ -440,7 +440,13 @@ func (r *BackupTaskReconciler) buildEnvVars(backupTask *backupv1alpha1.BackupTas
 				},
 			},
 		},
+
 	}
+        
+
+	// 添加保留策略相关的环境变量
+	retentionEnv := retentionPolicyToEnv(backupTask.Spec.Retention)
+	envVars = append(envVars, retentionEnv...)
 	return envVars
 }
 
@@ -645,6 +651,58 @@ func (r *BackupTaskReconciler) updateConditions(backupTask *backupv1alpha1.Backu
 		scheduledCondition,
 		runningCondition,
 	}
+}
+
+func retentionPolicyToEnv(policy *backupv1alpha1.RetentionPolicy) []corev1.EnvVar {
+    if policy == nil {
+        return nil
+    }
+    var envs []corev1.EnvVar
+
+    // MaxAgeDays 是指针，需要判断 nil 并解引用后转 string
+    if policy.MaxAgeDays != nil {
+        envs = append(envs, corev1.EnvVar{
+            Name:  "RETENTION_MAX_AGE_DAYS",
+            Value: strconv.Itoa(int(*policy.MaxAgeDays)), // int32 → int → string
+        })
+    }
+
+    if policy.MaxBackupCount != nil {
+        envs = append(envs, corev1.EnvVar{
+            Name:  "RETENTION_MAX_BACKUP_COUNT",
+            Value: strconv.Itoa(int(*policy.MaxBackupCount)),
+        })
+    }
+
+    // KeepLast 是非指针结构体，其字段为 int32，通过检查零值判断是否设置（omitempty 会忽略零值）
+    if policy.KeepLast != nil {
+        if policy.KeepLast.Hours != 0 {
+            envs = append(envs, corev1.EnvVar{
+                Name:  "RETENTION_KEEP_LAST_HOURS",
+                Value: strconv.Itoa(int(policy.KeepLast.Hours)),
+            })
+        }
+        if policy.KeepLast.Days != 0 {
+            envs = append(envs, corev1.EnvVar{
+                Name:  "RETENTION_KEEP_LAST_DAYS",
+                Value: strconv.Itoa(int(policy.KeepLast.Days)),
+            })
+        }
+        if policy.KeepLast.Weeks != 0 {
+            envs = append(envs, corev1.EnvVar{
+                Name:  "RETENTION_KEEP_LAST_WEEKS",
+                Value: strconv.Itoa(int(policy.KeepLast.Weeks)),
+            })
+        }
+        if policy.KeepLast.Months != 0 {
+            envs = append(envs, corev1.EnvVar{
+                Name:  "RETENTION_KEEP_LAST_MONTHS",
+                Value: strconv.Itoa(int(policy.KeepLast.Months)),
+            })
+        }
+    }
+
+    return envs
 }
 
 func (r *BackupTaskReconciler) applyRetentionPolicy(ctx context.Context, backupTask *backupv1alpha1.BackupTask) error {
